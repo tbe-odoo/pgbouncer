@@ -175,6 +175,7 @@ bool sending_auth_query(PgSocket *client)
 
 static void start_auth_query(PgSocket *client, const char *username)
 {
+	char client_addr_details[300];
 	int res;
 	PktBuf *buf;
 	const char *auth_query = client->db->auth_query ? client->db->auth_query : cf_auth_query;
@@ -214,7 +215,15 @@ static void start_auth_query(PgSocket *client, const char *username)
 	res = 0;
 	buf = pktbuf_dynamic(512);
 	if (buf) {
-		pktbuf_write_ExtQuery(buf, auth_query, 1, username);
+		/* bind client address if needed in auth_query */
+		if(strstr(auth_query, "$2")) {
+			pga_details(&client->remote_addr, client_addr_details, sizeof(client_addr_details));
+			pktbuf_write_ExtQuery(buf, auth_query, 2, username, client_addr_details);
+		}
+		/* bind only username if client address is not required in the auth_query */
+		else {
+			pktbuf_write_ExtQuery(buf, auth_query, 1, username);
+		}
 		res = pktbuf_send_immediate(buf, client->link);
 		pktbuf_free(buf);
 		/*
